@@ -23,5 +23,5 @@ usage() {
 
 check_dep() {
     EXEC_CHECK=$1
-    hash $EXEC_CHECK 2>/dev/null || { echo >&2 ""$EXEC_CHECK" is required but it's not installed. Aborting."; exit 1; }
+    hash "$EXEC_CHECK" 2>/dev/null || { echo >&2 "$EXEC_CHECK is required but it's not installed. Aborting."; exit 1; }
 }
