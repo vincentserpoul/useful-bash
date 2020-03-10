@@ -21,7 +21,7 @@ destroy_kubecontext() {
     kubectl config unset clusters."$KUBE_NAME";
 }
 
-#=======================  L o c a l  k 3 s  =======================#
+#=============================  L o c a l  k 3 s  =============================#
 
 create_k3s_cluster() {
     einfo 'creating k3d cluster';
@@ -29,7 +29,7 @@ create_k3s_cluster() {
         --workers 3;
     sleep 10s;
     save_kubeconfig_k3s_cluster;
-    save_kubecontext "$CLUSTER_NAME" "$PROVIDER";    
+    save_kubecontext "$CLUSTER_NAME" "$PROVIDER";
     wait_til_k3d_cluster_ready;
 }
 
@@ -49,14 +49,46 @@ destroy_k3s_cluster() {
 
 save_kubeconfig_k3s_cluster() {
     mkdir -p ~/.kube;
-    cat "$(k3d get-kubeconfig --name="$CLUSTER_NAME")" > ~/.kube/config-"$CLUSTER_NAME"-"$PROVIDER".yaml;
-
-    # cp  ~/.kube/config_"$CLUSTER_NAME".yaml  ~/.kube/config;
+    cat "$(k3d get-kubeconfig --name="$CLUSTER_NAME")" \
+        > ~/.kube/config-"$CLUSTER_NAME"-"$PROVIDER".yaml;
 }
 
-#=======================  h e l m  =======================#
+#===============================  h e l m  ====================================#
 
 helm_init() {
+    einfo 'initializing helm';
     helm repo add stable https://kubernetes-charts.storage.googleapis.com;
     helm repo update;
+}
+
+
+#==========================  D i g i t a l  O c e a n =========================#
+
+create_do_cluster() {
+    doctl kubernetes cluster create "$CLUSTER_NAME" --region sgp1 --size s-4vcpu-8gb --count 4;
+    save_kubeconfig_do_cluster;
+    save_kubecontext "$CLUSTER_NAME" "$PROVIDER";
+    kubectl create clusterrolebinding --user system:serviceaccount:kube-system:default \
+        kube-system-cluster-admin \
+        --clusterrole cluster-admin;
+    deploy_metrics_server;
+}
+
+destroy_do_cluster() {
+    doctl kubernetes cluster delete "$CLUSTER_NAME";
+    destroy_kubecontext "$CLUSTER_NAME";
+}
+
+save_kubeconfig_do_cluster() {
+    mkdir -p ~/.kube;
+    doctl kubernetes clusters kubeconfig show "$CLUSTER_NAME" > \
+        ~/.kube/config-"$CLUSTER_NAME"-do.yaml;
+}
+
+deploy_metrics_server() {
+    helm repo add stable https://kubernetes-charts.storage.googleapis.com/;
+    helm install metrics-server stable/metrics-server \
+        --namespace kube-system \
+        --set args="{--metric-resolution=15s,--kubelet-preferred-address-types=InternalIP}";
+    # https://www.digitalocean.com/community/tutorials/how-to-autoscale-your-workloads-on-digitalocean-kubernetes
 }
