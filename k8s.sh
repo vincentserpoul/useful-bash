@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+#=============  k u b e c t l  c o n t e x t  a n d  c o n f i g  =============#
+
 save_kubecontext() {
     KUBE_NAME=$1;
     KUBE_PROVIDER=$2;
@@ -14,6 +16,9 @@ save_kubecontext() {
 destroy_kubecontext() {
     KUBE_NAME=$1;
     kubectl config delete-context "$KUBE_NAME";
+    kubectl config unset users."$KUBE_NAME";
+    kubectl config unset contexts."$KUBE_NAME";
+    kubectl config unset clusters."$KUBE_NAME";
 }
 
 #=======================  L o c a l  k 3 s  =======================#
