@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+DIR="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+
+. "$DIR/utils.sh"
+
 #=============  k u b e c t l  c o n t e x t  a n d  c o n f i g  =============#
 
 save_kubecontext() {
