@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-DIR="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR" ]]; then DIR="$PWD"; fi
+DIR_K8S="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR_K8S" ]]; then DIR_K8S="$PWD"; fi
 
-. "$DIR/utils.sh"
+. "$DIR_K8S/utils.sh"
 
 #=============  k u b e c t l  c o n t e x t  a n d  c o n f i g  =============#
 
