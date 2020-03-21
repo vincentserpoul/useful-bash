@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-#=======================  F u n c t i o n s  =======================#
+#============================  L o g g i n g  =================================#
 
 die() {
 	printf '\033[1;31mERROR:\033[0m %s\n' "$@" >&2  # bold red
@@ -21,7 +21,10 @@ usage() {
 	sed -En '/^#---help---/,/^#---help---/p' "$0" | sed -E 's/^# ?//; 1d;$d;'
 }
 
+#=============================== D e p s ======================================#
+
 check_dep() {
     EXEC_CHECK=$1
-    hash "$EXEC_CHECK" 2>/dev/null || { echo >&2 "$EXEC_CHECK is required but it's not installed. Aborting."; exit 1; }
+    hash "$EXEC_CHECK" 2>/dev/null || \
+	die "$EXEC_CHECK is required but it's not installed. Aborting."
 }
