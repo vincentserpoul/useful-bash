@@ -2,98 +2,99 @@
 
 set -euo pipefail
 
+#==============================================================================#
+
+#============================  i n c l u d e s  ===============================#
+
 DIR_K8S="${BASH_SOURCE%/*}"
 if [[ ! -d "$DIR_K8S" ]]; then DIR_K8S="$PWD"; fi
 
+# shellcheck source=/dev/null
 . "$DIR_K8S/utils.sh"
 
-#=============  k u b e c t l  c o n t e x t  a n d  c o n f i g  =============#
+#===============================  d e p s  ====================================#
 
-save_kubecontext() {
-    KUBE_NAME=$1;
-    KUBE_PROVIDER=$2;
-    touch ~/.kube/config;
-    KUBECONFIG=~/.kube/config-"$KUBE_NAME"-"$KUBE_PROVIDER".yaml:~/.kube/config \
-      kubectl config view --flatten > ~/.kube/config;
-    kubectl config set-context "$KUBE_NAME";
+dep_check kubectl
+dep_check k3d
+dep_check helm
+
+#=============  k u b e c t l  c o n t e x t  &  c o n f i g  =================#
+
+kubecontext_save() {
+    local -r PROVIDER=$1
+    local -r CLUSTER_NAME=$2
+
+    if [[ ! -f ~/.kube/config ]]; then
+        touch ~/.kube/config
+    fi
+    KUBECONFIG=~/.kube/config-"$CLUSTER_NAME"-"$PROVIDER".yaml:~/.kube/config \
+        kubectl config view --flatten >~/.kube/config.new
+    mv ~/.kube/config ~/.kube/config.bak
+    mv ~/.kube/config.new ~/.kube/config
+    kubectl config set-context "$CLUSTER_NAME"
 }
 
-destroy_kubecontext() {
-    KUBE_NAME=$1;
-    kubectl config delete-context "$KUBE_NAME";
-    kubectl config unset users."$KUBE_NAME";
-    kubectl config unset contexts."$KUBE_NAME";
-    kubectl config unset clusters."$KUBE_NAME";
+kubecontext_destroy() {
+    local -r CLUSTER_NAME=$1
+
+    kubectl config delete-context "$CLUSTER_NAME"
+    kubectl config unset users."$CLUSTER_NAME"
+    kubectl config unset contexts."$CLUSTER_NAME"
+    kubectl config unset clusters."$CLUSTER_NAME"
 }
 
 #=============================  L o c a l  k 3 s  =============================#
 
-create_k3s_cluster() {
-    einfo 'creating k3d cluster';
-    k3d create --api-port 6443 --name "$CLUSTER_NAME" --publish 8080:80 \
-        --workers 3;
-    sleep 10s;
-    save_kubeconfig_k3s_cluster;
-    save_kubecontext "$CLUSTER_NAME" "$PROVIDER";
-    wait_til_k3d_cluster_ready;
+k3s_cluster_create() {
+    local -r CLUSTER_NAME=$1
+    local -r WORKERS_COUNT=${2:-3}
+    local -r PUBLISH_PORT=${3:-8080}
+    local -r API_PORT=${4:-6443}
+
+    if [[ -d "$CLUSTER_NAME" ]]; then die "you must define a cluster name"; fi
+
+    einfo "creating k3d cluster ""$CLUSTER_NAME"" with ""$WORKERS_COUNT"" workers, listening on port ""$PUBLISH_PORT"", api on port ""$API_PORT"""
+    k3d create --name "$CLUSTER_NAME" \
+        --workers "$WORKERS_COUNT" \
+        --publish "$PUBLISH_PORT":80 \
+        --api-port "$API_PORT"
+
+    sleep 10s
+    k3s_cluster_kubeconfig_save "$CLUSTER_NAME"
+    kubecontext_save "k3d" "$CLUSTER_NAME"
+    k3d_cluster_wait_til_ready "$CLUSTER_NAME"
 }
 
-wait_til_k3d_cluster_ready() {
-    einfo 'waiting for k3d cluster to be available';
-    sleep 5s;
-    kubectl -n kube-system rollout status deployments/coredns;
-    sleep 10s;
-    kubectl -n kube-system rollout status deployments/traefik;
+k3d_cluster_wait_til_ready() {
+    local -r CLUSTER_NAME=$1
+
+    einfo 'waiting for k3d cluster to be available'
+    sleep 5s
+    kubectl -n kube-system rollout status deployments/coredns
+    sleep 10s
+    kubectl -n kube-system rollout status deployments/traefik
 }
 
-destroy_k3s_cluster() {
-    ewarn 'destroying local k3d cluster';
-    k3d delete --name "$CLUSTER_NAME";
-    destroy_kubecontext "$CLUSTER_NAME";
+k3s_cluster_destroy() {
+    local -r CLUSTER_NAME=$1
+
+    ewarn 'destroying local k3d cluster'
+    k3d delete --name "$CLUSTER_NAME"
+    kubecontext_destroy "$CLUSTER_NAME"
 }
 
-save_kubeconfig_k3s_cluster() {
-    mkdir -p ~/.kube;
+k3s_cluster_kubeconfig_save() {
+    local -r CLUSTER_NAME=$1
+
+    mkdir -p ~/.kube
     cat "$(k3d get-kubeconfig --name="$CLUSTER_NAME")" \
-        > ~/.kube/config-"$CLUSTER_NAME"-"$PROVIDER".yaml;
+        >~/.kube/config-"$CLUSTER_NAME"-k3d.yaml
 }
 
 #===============================  h e l m  ====================================#
 
 helm_init() {
-    einfo 'initializing helm';
-    helm repo add stable https://kubernetes-charts.storage.googleapis.com;
-    helm repo update;
-}
-
-
-#==========================  D i g i t a l  O c e a n =========================#
-
-create_do_cluster() {
-    doctl kubernetes cluster create "$CLUSTER_NAME" --region sgp1 --size s-4vcpu-8gb --count 4;
-    save_kubeconfig_do_cluster;
-    save_kubecontext "$CLUSTER_NAME" "$PROVIDER";
-    kubectl create clusterrolebinding --user system:serviceaccount:kube-system:default \
-        kube-system-cluster-admin \
-        --clusterrole cluster-admin;
-    deploy_metrics_server;
-}
-
-destroy_do_cluster() {
-    doctl kubernetes cluster delete "$CLUSTER_NAME";
-    destroy_kubecontext "$CLUSTER_NAME";
-}
-
-save_kubeconfig_do_cluster() {
-    mkdir -p ~/.kube;
-    doctl kubernetes clusters kubeconfig show "$CLUSTER_NAME" > \
-        ~/.kube/config-"$CLUSTER_NAME"-do.yaml;
-}
-
-deploy_metrics_server() {
-    helm repo add stable https://kubernetes-charts.storage.googleapis.com/;
-    helm install metrics-server stable/metrics-server \
-        --namespace kube-system \
-        --set args="{--metric-resolution=15s,--kubelet-preferred-address-types=InternalIP}";
-    # https://www.digitalocean.com/community/tutorials/how-to-autoscale-your-workloads-on-digitalocean-kubernetes
+    einfo 'initializing helm'
+    helm repo add stable https://kubernetes-charts.storage.googleapis.com
+    helm repo update
 }
