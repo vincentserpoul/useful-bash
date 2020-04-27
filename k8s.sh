@@ -62,10 +62,10 @@ k3s_cluster_create() {
     sleep 10s
     k3s_cluster_kubeconfig_save "$CLUSTER_NAME"
     kubecontext_save "k3d" "$CLUSTER_NAME"
-    k3d_cluster_wait_til_ready "$CLUSTER_NAME"
+    k3s_cluster_wait_til_ready "$CLUSTER_NAME"
 }
 
-k3d_cluster_wait_til_ready() {
+k3s_cluster_wait_til_ready() {
     local -r CLUSTER_NAME=$1
 
     einfo 'waiting for k3d cluster to be available'
