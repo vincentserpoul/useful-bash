@@ -50,6 +50,8 @@ k3s_cluster_create() {
     local -r WORKERS_COUNT=${2:-3}
     local -r PUBLISH_PORT=${3:-8080}
     local -r API_PORT=${4:-6443}
+    local -r SERVER_ARG=${5:-""}
+    local -r AGENT_ARG=${6:-""}
 
     if [[ -d "$CLUSTER_NAME" ]]; then die "you must define a cluster name"; fi
 
@@ -57,7 +59,9 @@ k3s_cluster_create() {
     k3d create --name "$CLUSTER_NAME" \
         --workers "$WORKERS_COUNT" \
         --publish "$PUBLISH_PORT":80 \
-        --api-port "$API_PORT"
+        --api-port "$API_PORT" \
+        --server-arg "$SERVER_ARG" \
+        --agent-arg "$AGENT_ARG"
 
     sleep 10s
     k3s_cluster_kubeconfig_save "$CLUSTER_NAME"
