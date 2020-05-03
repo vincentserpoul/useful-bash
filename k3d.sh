@@ -6,42 +6,18 @@ set -euo pipefail
 
 #============================  i n c l u d e s  ===============================#
 
-DIR_K8S="${BASH_SOURCE%/*}"
-if [[ ! -d "$DIR_K8S" ]]; then DIR_K8S="$PWD"; fi
+DIR_K3S="${BASH_SOURCE%/*}"
+if [[ ! -d "$DIR_K3S" ]]; then DIR_K3S="$PWD"; fi
 
 # shellcheck source=/dev/null
-. "$DIR_K8S/utils.sh"
+. "$DIR_K3S/utils.sh"
+# shellcheck source=/dev/null
+. "$DIR_K3S/kubecontext.sh"
 
 #===============================  d e p s  ====================================#
 
 dep_check kubectl
 dep_check k3d
-dep_check helm
-
-#=============  k u b e c t l  c o n t e x t  &  c o n f i g  =================#
-
-kubecontext_save() {
-    local -r PROVIDER=$1
-    local -r CLUSTER_NAME=$2
-
-    if [[ ! -f ~/.kube/config ]]; then
-        touch ~/.kube/config
-    fi
-    KUBECONFIG=~/.kube/config-"$CLUSTER_NAME"-"$PROVIDER".yaml:~/.kube/config \
-        kubectl config view --flatten >~/.kube/config.new
-    mv ~/.kube/config ~/.kube/config.bak
-    mv ~/.kube/config.new ~/.kube/config
-    kubectl config set-context "$CLUSTER_NAME"
-}
-
-kubecontext_destroy() {
-    local -r CLUSTER_NAME=$1
-
-    kubectl config delete-context "$CLUSTER_NAME"
-    kubectl config unset users."$CLUSTER_NAME"
-    kubectl config unset contexts."$CLUSTER_NAME"
-    kubectl config unset clusters."$CLUSTER_NAME"
-}
 
 #=============================  L o c a l  k 3 s  =============================#
 
@@ -64,8 +40,11 @@ k3s_cluster_create() {
         --agent-arg "$AGENT_ARG"
 
     sleep 10s
-    k3s_cluster_kubeconfig_save "$CLUSTER_NAME"
-    kubecontext_save "k3d" "$CLUSTER_NAME"
+
+    local -r CONTEXT_FILE_NAME="$USER/.kube/config-""$CLUSTER_NAME""-k3d.yaml"
+    k3s_cluster_kubeconfig_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
+    kubecontext_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
+
     k3s_cluster_wait_til_ready "$CLUSTER_NAME"
 }
 
@@ -79,26 +58,19 @@ k3s_cluster_wait_til_ready() {
     kubectl -n kube-system rollout status deployments/traefik
 }
 
-k3s_cluster_destroy() {
+k3s_cluster_delete() {
     local -r CLUSTER_NAME=$1
 
-    ewarn 'destroying local k3d cluster'
+    ewarn 'deleting local k3d cluster'
     k3d delete --name "$CLUSTER_NAME"
-    kubecontext_destroy "$CLUSTER_NAME"
+    kubecontext_delete "$CLUSTER_NAME"
 }
 
 k3s_cluster_kubeconfig_save() {
     local -r CLUSTER_NAME=$1
+    local -r CONTEXT_FILE_NAME=$2
 
     mkdir -p ~/.kube
     cat "$(k3d get-kubeconfig --name="$CLUSTER_NAME")" \
-        >~/.kube/config-"$CLUSTER_NAME"-k3d.yaml
-}
-
-#===============================  h e l m  ====================================#
-
-helm_init() {
-    einfo 'initializing helm'
-    helm repo add stable https://kubernetes-charts.storage.googleapis.com
-    helm repo update
+        >"$CONTEXT_FILE_NAME"
 }
