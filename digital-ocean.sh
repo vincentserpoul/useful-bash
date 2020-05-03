@@ -20,6 +20,7 @@ if [[ ! -d "$DIR_DO" ]]; then DIR_DO="$PWD"; fi
 
 dep_check kubectl
 dep_check doctl
+dep_check helm
 
 #==========================  D i g i t a l  O c e a n =========================#
 
@@ -40,9 +41,7 @@ do_cluster_create() {
 
     sleep 10s
 
-    local -r CONTEXT_FILE_NAME="$USER/.kube/config-""$CLUSTER_NAME""-do.yaml"
-    do_cluster_kubeconfig_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
-    kubecontext_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
+    do_cluster_kubeconfig_save "$CLUSTER_NAME"
 
     kubectl create clusterrolebinding \
         --user system:serviceaccount:kube-system:default kube-system-cluster-admin \
@@ -61,22 +60,33 @@ do_cluster_wait_til_ready() {
     kubectl -n kube-system rollout status deployments/traefik
 }
 
+do_cluster_context_file_path() {
+    local -r CLUSTER_NAME=$1
+    echo "$HOME/.kube/config-""$CLUSTER_NAME"".yaml"
+}
+
 do_cluster_delete() {
     local -r CLUSTER_NAME=$1
+
+    local -r CONTEXT_FILE_PATH=$(do_cluster_context_file_path "$CLUSTER_NAME")
 
     ewarn 'deleting do cluster'
 
     doctl kubernetes cluster delete "$CLUSTER_NAME"
     kubecontext_delete "$CLUSTER_NAME"
+    rm "$CONTEXT_FILE_PATH"
 }
 
 do_cluster_kubeconfig_save() {
     local -r CLUSTER_NAME=$1
-    local -r CONTEXT_FILE_NAME=$2
 
-    mkdir -p ~/.kube
+    local -r CONTEXT_FILE_PATH=$(do_cluster_context_file_path "$CLUSTER_NAME")
+
+    mkdir -p "$HOME"/.kube
     doctl kubernetes clusters kubeconfig show "$CLUSTER_NAME" \
-        >"$CONTEXT_FILE_NAME"
+        >"$CONTEXT_FILE_PATH"
+
+    kubecontext_save "$CLUSTER_NAME" "$CONTEXT_FILE_PATH"
 }
 
 metrics_server_deploy() {
