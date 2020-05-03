@@ -41,9 +41,7 @@ k3s_cluster_create() {
 
     sleep 10s
 
-    local -r CONTEXT_FILE_NAME="$USER/.kube/config-""$CLUSTER_NAME""-k3d.yaml"
-    k3s_cluster_kubeconfig_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
-    kubecontext_save "$CLUSTER_NAME" "$CONTEXT_FILE_NAME"
+    k3s_cluster_kubeconfig_save "$CLUSTER_NAME"
 
     k3s_cluster_wait_til_ready "$CLUSTER_NAME"
 }
@@ -58,19 +56,30 @@ k3s_cluster_wait_til_ready() {
     kubectl -n kube-system rollout status deployments/traefik
 }
 
+k3s_cluster_context_file_path() {
+    local -r CLUSTER_NAME=$1
+    echo "$HOME/.kube/config-""$CLUSTER_NAME"".yaml"
+}
+
 k3s_cluster_delete() {
     local -r CLUSTER_NAME=$1
+
+    local -r CONTEXT_FILE_PATH=$(k3s_cluster_context_file_path "$CLUSTER_NAME")
 
     ewarn 'deleting local k3d cluster'
     k3d delete --name "$CLUSTER_NAME"
     kubecontext_delete "$CLUSTER_NAME"
+    rm "$CONTEXT_FILE_PATH"
 }
 
 k3s_cluster_kubeconfig_save() {
     local -r CLUSTER_NAME=$1
-    local -r CONTEXT_FILE_NAME=$2
 
-    mkdir -p ~/.kube
+    local -r CONTEXT_FILE_PATH=$(k3s_cluster_context_file_path "$CLUSTER_NAME")
+
+    mkdir -p "$HOME"/.kube
     cat "$(k3d get-kubeconfig --name="$CLUSTER_NAME")" \
-        >"$CONTEXT_FILE_NAME"
+        >"$CONTEXT_FILE_PATH"
+
+    kubecontext_save "$CLUSTER_NAME" "$CONTEXT_FILE_PATH"
 }
